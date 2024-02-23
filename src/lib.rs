@@ -215,7 +215,7 @@ impl Searchable for DeepL {
     }
     fn colored_name(&self) -> RVec<quick_search_lib::ColoredChar> {
         // can be dynamic although it's iffy how it might be used
-        ColoredChar::from_string("DeepL", 0x113251FF)
+        ColoredChar::from_string("DeepL", 0x2292A4FF)
     }
     fn execute(&self, result: &SearchResult) {
         let extra_info = result.extra_info();
