@@ -508,6 +508,7 @@ impl TargetLanguageCode {
             "indonesian" => TargetLanguageCode::ID,
             "it" => TargetLanguageCode::IT,
             "italian" => TargetLanguageCode::IT,
+            "jp" => TargetLanguageCode::JA,
             "ja" => TargetLanguageCode::JA,
             "japanese" => TargetLanguageCode::JA,
             "ko" => TargetLanguageCode::KO,
