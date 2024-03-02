@@ -5,7 +5,7 @@ use abi_stable::{
     sabi_trait::prelude::TD_Opaque,
     std_types::{RBox, RStr, RString, RVec},
 };
-use quick_search_lib::{ColoredChar, PluginId, SearchLib, SearchLib_Ref, SearchResult, Searchable, Searchable_TO};
+use quick_search_lib::{ColoredChar, Log, PluginId, SearchLib, SearchLib_Ref, SearchResult, Searchable, Searchable_TO};
 use serde::{Deserialize, Serialize};
 
 static NAME: &str = "DeepL-Translate";
@@ -16,22 +16,23 @@ pub fn get_library() -> SearchLib_Ref {
 }
 
 #[sabi_extern_fn]
-fn get_searchable(id: PluginId) -> Searchable_TO<'static, RBox<()>> {
-    let this = DeepL::new(id);
+fn get_searchable(id: PluginId, logger: quick_search_lib::ScopedLogger) -> Searchable_TO<'static, RBox<()>> {
+    let this = DeepL::new(id, logger);
     Searchable_TO::from_value(this, TD_Opaque)
 }
 
-#[derive(Debug, Clone)]
 struct DeepL {
     id: PluginId,
     client: reqwest::blocking::Client,
     config: quick_search_lib::Config,
+    logger: quick_search_lib::ScopedLogger,
 }
 
 impl DeepL {
-    fn new(id: PluginId) -> Self {
+    fn new(id: PluginId, logger: quick_search_lib::ScopedLogger) -> Self {
         Self {
             id,
+            logger,
             client: reqwest::blocking::Client::new(),
             config: default_config(),
         }
@@ -42,13 +43,14 @@ impl Searchable for DeepL {
     fn search(&self, query: RString) -> RVec<SearchResult> {
         let mut res: Vec<SearchResult> = vec![];
 
-        let return_error_messages = self.config.get("Return Error messages").and_then(|entry| entry.as_bool()).unwrap_or(false);
+        // let return_error_messages = self.config.get("Return Error messages").and_then(|entry| entry.as_bool()).unwrap_or(false);
         let api_key = self.config.get("DeepL Api Key").and_then(|entry| entry.as_string()).unwrap_or_default();
 
         if api_key.is_empty() {
-            if return_error_messages {
-                res.push(SearchResult::new("No API key").set_context("No DeepL API key was provided"));
-            }
+            // if return_error_messages {
+            //     res.push(SearchResult::new("No API key").set_context("No DeepL API key was provided"));
+            // }
+            self.logger.error("No API key was provided");
             return res.into();
         }
         // attempt to parse the query into one of:
@@ -73,9 +75,10 @@ impl Searchable for DeepL {
         let rest = rest.trim().to_owned();
 
         if rest.is_empty() {
-            if return_error_messages {
-                res.push(SearchResult::new("No query").set_context("No query was provided"));
-            }
+            // if return_error_messages {
+            //     res.push(SearchResult::new("No query").set_context("No query was provided"));
+            // }
+            self.logger.trace("No query was provided");
             return res.into();
         }
 
@@ -83,9 +86,10 @@ impl Searchable for DeepL {
         let mut parts = query_codes.split("->");
         let query = match (parts.next(), parts.next(), parts.next()) {
             (_, _, Some(_)) => {
-                if return_error_messages {
-                    res.push(SearchResult::new("Invalid query").set_context("Too many arrows"));
-                }
+                // if return_error_messages {
+                //     res.push(SearchResult::new("Invalid query").set_context("Too many arrows"));
+                // }
+                self.logger.warn("Too many arrows in the query");
                 return res.into();
             }
             (Some(source), Some(target), None) => {
@@ -95,9 +99,10 @@ impl Searchable for DeepL {
                 let source = match SourceLanguageCode::guess_from_str(&source) {
                     Some(code) => code,
                     None => {
-                        if return_error_messages {
-                            res.push(SearchResult::new("Invalid query").set_context("Invalid source language code"));
-                        }
+                        // if return_error_messages {
+                        //     res.push(SearchResult::new("Invalid query").set_context("Invalid source language code"));
+                        // }
+                        self.logger.warn("Invalid source language code");
                         return res.into();
                     }
                 };
@@ -105,9 +110,10 @@ impl Searchable for DeepL {
                 let target = match TargetLanguageCode::guess_from_str(&target) {
                     Some(code) => code,
                     None => {
-                        if return_error_messages {
-                            res.push(SearchResult::new("Invalid query").set_context("Invalid target language code"));
-                        }
+                        // if return_error_messages {
+                        //     res.push(SearchResult::new("Invalid query").set_context("Invalid target language code"));
+                        // }
+                        self.logger.warn("Invalid target language code");
                         return res.into();
                     }
                 };
@@ -124,9 +130,10 @@ impl Searchable for DeepL {
                 let target = match TargetLanguageCode::guess_from_str(&target) {
                     Some(code) => code,
                     None => {
-                        if return_error_messages {
-                            res.push(SearchResult::new("Invalid query").set_context("Invalid target language code"));
-                        }
+                        // if return_error_messages {
+                        //     res.push(SearchResult::new("Invalid query").set_context("Invalid target language code"));
+                        // }
+                        self.logger.warn("Invalid target language code");
                         return res.into();
                     }
                 };
@@ -138,9 +145,10 @@ impl Searchable for DeepL {
                 }
             }
             _ => {
-                if return_error_messages {
-                    res.push(SearchResult::new("Invalid query").set_context("No target language code"));
-                }
+                // if return_error_messages {
+                //     res.push(SearchResult::new("Invalid query").set_context("No target language code"));
+                // }
+                self.logger.warn("No target language code");
                 return res.into();
             }
         };
@@ -160,9 +168,10 @@ impl Searchable for DeepL {
         {
             Ok(response) => response,
             Err(e) => {
-                if return_error_messages {
-                    res.push(SearchResult::new("Request failed").set_context(&format!("Failed to send request: {}", e)));
-                }
+                // if return_error_messages {
+                //     res.push(SearchResult::new("Request failed").set_context(&format!("Failed to send request: {}", e)));
+                // }
+                self.logger.error(&format!("Failed to send request: {}", e));
                 return res.into();
             }
         };
@@ -170,9 +179,10 @@ impl Searchable for DeepL {
         let response = match response.json::<TranslateResponse>() {
             Ok(response) => response,
             Err(e) => {
-                if return_error_messages {
-                    res.push(SearchResult::new("Response failed").set_context(&format!("Failed to parse response: {}", e)));
-                }
+                // if return_error_messages {
+                //     res.push(SearchResult::new("Response failed").set_context(&format!("Failed to parse response: {}", e)));
+                // }
+                self.logger.error(&format!("Failed to parse response: {}", e));
                 return res.into();
             }
         };
@@ -222,12 +232,12 @@ impl Searchable for DeepL {
         if !extra_info.is_empty() {
             if let Ok::<clipboard::ClipboardContext, Box<dyn std::error::Error>>(mut clipboard) = clipboard::ClipboardProvider::new() {
                 if let Ok(()) = clipboard::ClipboardProvider::set_contents(&mut clipboard, extra_info.to_owned()) {
-                    log::trace!("copied to clipboard: {}", extra_info);
+                    self.logger.trace(&format!("copied to clipboard: {}", extra_info));
                 } else {
-                    log::error!("failed to copy to clipboard: {}", extra_info);
+                    self.logger.error(&format!("failed to copy to clipboard: {}", extra_info));
                 }
             } else {
-                log::error!("failed to copy to clipboard: {}", extra_info);
+                self.logger.error(&format!("failed to copy to clipboard: {}", extra_info));
             }
         }
 
@@ -248,7 +258,7 @@ fn default_config() -> quick_search_lib::Config {
     let mut config = quick_search_lib::Config::new();
     config.insert("DeepL Api Key".into(), quick_search_lib::EntryType::String { value: RString::new() });
     config.insert("Use free tier".into(), quick_search_lib::EntryType::Bool { value: true });
-    config.insert("Return Error messages".into(), quick_search_lib::EntryType::Bool { value: false });
+    // config.insert("Return Error messages".into(), quick_search_lib::EntryType::Bool { value: false });
     config.insert("Include query in clipboard".into(), quick_search_lib::EntryType::Bool { value: false });
     config.insert("Include language code in clipboard".into(), quick_search_lib::EntryType::Bool { value: false });
     config
